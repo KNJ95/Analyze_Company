@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 # ── 設定 ──────────────────────────────────────────────────────────────────────
 BASE_URL   = "https://job.mynavi.jp/27/pc/search/corp{id}/{page}.html"
 OUTPUT     = pathlib.Path(__file__).parent / "public" / "jobs_raw.json"
-INTERVAL   = (0.0, 0.5)   # リクエスト間隔（秒）のランダム範囲
+INTERVAL   = (2.0, 4.0)   # リクエスト間隔（秒）のランダム範囲
 TIMEOUT    = 15
 HEADERS    = {
     "User-Agent": (
@@ -49,13 +49,49 @@ def extract_text(html: str) -> str:
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return text[:6000]
 
+def extract_company_data(html: str) -> dict:
+    """会社概要HTMLから売上高・従業員数を抽出する"""
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text(separator="\n")
+
+    data = {"sales": "", "employees": ""}
+
+    # 売上高（例: 1兆6290億円、500億円、12,345百万円）
+    m = re.search(
+        r"売上(?:高|額)[^\n]*\n([^\n]{1,40}(?:億|兆|万|百万|千万)[^\n]{0,30})",
+        text
+    )
+    if m:
+        data["sales"] = m.group(1).strip()
+
+    # 従業員数（例: 25,676名、1,200人）
+    m = re.search(
+        r"従業員[^\n]*\n([^\n]{1,40}(?:名|人)[^\n]{0,30})",
+        text
+    )
+    if m:
+        data["employees"] = m.group(1).strip()
+
+    return data
+
 def scrape_corp(corp_id: str) -> dict:
-    result = {"corpId": corp_id, "outlineText": "", "employmentText": "", "error": None}
+    result = {
+        "corpId": corp_id,
+        "outlineText": "",
+        "employmentText": "",
+        "sales": "",
+        "employees": "",
+        "error": None,
+    }
     # ① 会社概要
     url_outline = BASE_URL.format(id=corp_id, page="outline")
     html = fetch(url_outline)
     if html:
         result["outlineText"] = extract_text(html)
+        # 売上・従業員を抽出
+        company_data = extract_company_data(html)
+        result["sales"]     = company_data["sales"]
+        result["employees"] = company_data["employees"]
     else:
         result["error"] = "outline取得失敗"
         return result

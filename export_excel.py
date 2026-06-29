@@ -19,20 +19,18 @@ COLUMNS = [
     ("会社名",                "company"),
     ("業種",                  "industry"),
     ("企業規模",               "size_label"),
-    ("売上（任意）",            None),
-    ("職種",                  "job_types"),       # リストを結合
-    ("勤務地",                 None),
-    ("仕事内容（全文）",         "outline_summary"),
+    ("従業員数",               "employees"),      # D: scraper.pyで取得
+    ("売上高",                 "sales"),           # E: scraper.pyで取得
+    ("職種",                  "job_types"),
+    ("仕事内容",               "outline_summary"),
     ("求める人物像（最重要）",    "persona"),
     ("必須スキル",              None),
     ("歓迎スキル",              None),
-    ("求める行動特性",           "traits"),         # リストを結合
+    ("求める行動特性",           "traits"),
     ("使用技術・ツール",          None),
     ("初任給",                 None),
     ("URL（求人ページ）",        "url"),
-    ("取得日",                 "scraped_at"),
-    ("メモ",                  None),
-    # Be-Ready 評価軸（テンプレートに追加）
+    # Be-Ready 評価軸
     ("Be-ReadyレベルLv1〜4",  "level"),
     ("①課題設定力",            "s1"),
     ("②情報活用力",            "s2"),
@@ -93,6 +91,10 @@ def extract_value(job, key):
         return result.get("industry", "")
     if key == "size_label":
         return result.get("size_label", "")
+    if key == "sales":
+        return job.get("sales", "")
+    if key == "employees":
+        return job.get("employees", "")
     if key == "job_types":
         return " / ".join(result.get("job_types", []))
     if key == "outline_summary":
@@ -184,12 +186,12 @@ def export(jobs_path: str, output_path: str):
 
     # ── 列幅設定 ────────────────────────────────────────────────────────
     col_widths = {
-        1:  20,   # 会社名
+        1:  22,   # 会社名
         2:  14,   # 業種
-        3:  12,   # 規模
-        4:  10,   # 売上
-        5:  18,   # 職種
-        6:  12,   # 勤務地
+        3:  14,   # 規模
+        4:  20,   # 従業員数
+        5:  20,   # 売上高
+        6:  18,   # 職種
         7:  40,   # 仕事内容
         8:  40,   # 求める人物像
         9:  20,   # 必須スキル
@@ -198,13 +200,11 @@ def export(jobs_path: str, output_path: str):
         12: 18,   # 技術
         13: 12,   # 初任給
         14: 35,   # URL
-        15: 12,   # 取得日
-        16: 16,   # メモ
-        17: 14,   # Lv
-        18: 8, 19: 8, 20: 8, 21: 8, 22: 8,  # 軸①〜⑤
-        23: 8, 24: 8, 25: 8, 26: 8,           # 軸⑥〜⑨
-        27: 10,   # 平均
-        28: 30,   # 判定理由
+        15: 14,   # Lv
+        16: 8, 17: 8, 18: 8, 19: 8, 20: 8,   # 軸①〜⑤
+        21: 8, 22: 8, 23: 8, 24: 8,            # 軸⑥〜⑨
+        25: 10,   # 平均
+        26: 30,   # 判定理由
     }
     for col_idx, width in col_widths.items():
         ws.column_dimensions[get_column_letter(col_idx)].width = width

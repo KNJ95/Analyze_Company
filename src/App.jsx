@@ -36,17 +36,25 @@ const store = {
   async del(id)  { try { await window.storage.delete(`mjob:${id}`); } catch {} },
 };
 
-async function analyzeWithClaude(corpId, text) {
+const BATCH_SIZE = 5; // 1回のAPIで処理する社数
+
+async function analyzeBatch(items) {
+  // 改善A: 複数社をまとめて送信
+  const jobs = items.map(item => ({
+    corpId: item.corpId,
+    text: (item.outlineText||"") + "\n\n" + (item.employmentText||""),
+  }));
   const res = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ corpId, text }),
+    body: JSON.stringify({ jobs }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `API error ${res.status}`);
   }
-  return res.json();
+  const data = await res.json();
+  return data.results || {}; // { corpId: result, ... }
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -81,28 +89,52 @@ export default function App() {
       .catch(e => { setLoadErr(e.message); addLog(`jobs_raw.json が見つかりません — scraper.py を実行してください`, "error"); });
   }, []);
 
+  // 改善A: BATCH_SIZE件ずつキューから取り出して一括処理
   useEffect(() => {
     if (processing || queue.length === 0) return;
-    if (stopped) return;  // ストップ中はキューを消費しない
+    if (stopped) return;
     (async () => {
-      const [item, ...rest] = queue;
-      setQueue(rest);
       setProcessing(true);
-      const id = `${item.corpId}_${Date.now()}`;
-      setJobs(p => [{id, corpId:item.corpId, company:"", industry:"", status:"analyzing", result:null, savedAt:Date.now()}, ...p]);
-      addLog(`🤖 分析中: corp${item.corpId}（残り ${rest.length}件）`);
+      const batch = queue.slice(0, BATCH_SIZE);
+      const rest  = queue.slice(BATCH_SIZE);
+      setQueue(rest);
+
+      // バッチ内の全社を「分析中」にする
+      const ids = {};
+      batch.forEach(item => {
+        const id = `${item.corpId}_${Date.now()}_${Math.random()}`;
+        ids[item.corpId] = id;
+        setJobs(p => [{id, corpId:item.corpId, company:"", industry:"", status:"analyzing", result:null, savedAt:Date.now()}, ...p]);
+      });
+
+      addLog(`🤖 ${batch.length}社 をまとめてAI分析中...（残り ${rest.length}件）`);
+
       try {
-        const text = (item.outlineText||"") + "\n\n" + (item.employmentText||"");
-        const result = await analyzeWithClaude(item.corpId, text);
-        const done = {id, corpId:item.corpId, company:result.company||"", industry:result.industry||"", status:"done", result, savedAt:Date.now()};
-        setJobs(p => p.map(j => j.id===id ? done : j));
-        await store.save(done);
-        addLog(`✅ ${result.company} ／ ${result.industry} ／ ${result.level}`, "success");
+        const resultMap = await analyzeBatch(batch);
+
+        for (const item of batch) {
+          const id = ids[item.corpId];
+          const result = resultMap[item.corpId] || resultMap[String(item.corpId)];
+          if (result) {
+            const done = {id, corpId:item.corpId, company:result.company||"", industry:result.industry||"", status:"done", result, savedAt:Date.now()};
+            setJobs(p => p.map(j => j.id===id ? done : j));
+            await store.save(done);
+            addLog(`✅ ${result.company} ／ ${result.industry} ／ ${result.level}`, "success");
+          } else {
+            setJobs(p => p.map(j => j.id===id ? {...j, status:"error", error:"レスポンスに含まれていません"} : j));
+            addLog(`✗ corp${item.corpId}: レスポンスに含まれていません`, "error");
+          }
+        }
       } catch(e) {
-        setJobs(p => p.map(j => j.id===id ? {...j, status:"error", error:e.message} : j));
-        addLog(`✗ corp${item.corpId}: ${e.message}`, "error");
+        // バッチ全体が失敗した場合は全社エラーに
+        batch.forEach(item => {
+          const id = ids[item.corpId];
+          setJobs(p => p.map(j => j.id===id ? {...j, status:"error", error:e.message} : j));
+        });
+        addLog(`✗ バッチ分析失敗: ${e.message}`, "error");
       }
-      if (rest.length > 0) await sleep(300);
+
+      if (rest.length > 0) await sleep(500);
       setProcessing(false);
     })();
   }, [queue, processing]);
