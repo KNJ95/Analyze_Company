@@ -1,4 +1,3 @@
-// version 2024-06-09
 import { useState, useEffect } from "react";
 
 const AXES = [
@@ -67,6 +66,7 @@ export default function App() {
   const [tab,        setTab]        = useState("analyze");
   const [filterInd,  setFilterInd]  = useState("all");
   const [filterLv,   setFilterLv]   = useState("all");
+  const [stopped,    setStopped]    = useState(false);
 
   const addLog = (msg, type="info") =>
     setLogs(p => [{msg, type, time:new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}, ...p].slice(0,150));
@@ -83,6 +83,7 @@ export default function App() {
 
   useEffect(() => {
     if (processing || queue.length === 0) return;
+    if (stopped) return;  // ストップ中はキューを消費しない
     (async () => {
       const [item, ...rest] = queue;
       setQueue(rest);
@@ -119,8 +120,14 @@ export default function App() {
 
   const enqueueAll = () => {
     if (!pendingRaw.length) return;
+    setStopped(false);
     setQueue(p => [...p, ...pendingRaw]);
     addLog(`📋 ${pendingRaw.length}件 をAI分析キューに追加`);
+  };
+  const stopQueue = () => {
+    setStopped(true);
+    setQueue([]);
+    addLog(`⏹ 分析を停止しました（処理中の1件は完了後に止まります）`, "error");
   };
   const retryErrors = () => {
     const errIds = new Set(errorJobs.map(j => j.corpId));
@@ -193,7 +200,12 @@ export default function App() {
                     </div>
                     <div style={{display:"flex",gap:8}}>
                       {errorJobs.length>0 && <button style={sty.btnSm} onClick={retryErrors}>エラー{errorJobs.length}件を再試行</button>}
-                      <button style={sty.btn} onClick={enqueueAll} disabled={!pendingRaw.length}>
+                      {(queue.length > 0 || processing) && (
+                        <button onClick={stopQueue} style={{cursor:"pointer",padding:"9px 20px",borderRadius:9,border:"none",background:`${C.error}`,color:"#fff",fontSize:13,fontWeight:600}}>
+                          ⏹ 停止
+                        </button>
+                      )}
+                      <button style={sty.btn} onClick={enqueueAll} disabled={!pendingRaw.length || queue.length > 0 || processing}>
                         {pendingRaw.length>0 ? `未分析 ${pendingRaw.length}件 をAI分析する` : "すべて分析済み ✓"}
                       </button>
                     </div>
