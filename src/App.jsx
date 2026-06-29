@@ -137,6 +137,25 @@ export default function App() {
     setQueue(p => [...p, ...toRetry]);
     addLog(`🔄 エラー ${toRetry.length}件 を再キュー`);
   };
+
+  const downloadJSON = () => {
+    // ブラウザのlocalStorageから分析済み結果を取得してJSONダウンロード
+    const data = doneJobs.map(j => ({
+      corpId:        j.corpId,
+      outlineText:   raw.find(r => r.corpId === j.corpId)?.outlineText || "",
+      employmentText:raw.find(r => r.corpId === j.corpId)?.employmentText || "",
+      scraped_at:    raw.find(r => r.corpId === j.corpId)?.scraped_at || "",
+      result:        j.result,
+    }));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `jobs_analyzed_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    addLog(`📥 ${data.length}件 をJSONダウンロードしました`, "success");
+  };
   const removeJob = async id => { setJobs(p => p.filter(j => j.id!==id)); await store.del(id); };
 
   const summary = {};
@@ -175,6 +194,11 @@ export default function App() {
           {[["analyze","分析"],["list",`一覧(${doneJobs.length})`],["summary","業種別集計"]].map(([v,l]) => (
             <button key={v} style={sty.tabBtn(tab===v)} onClick={()=>setTab(v)}>{l}</button>
           ))}
+          {doneJobs.length > 0 && (
+            <button onClick={downloadJSON} style={{cursor:"pointer",padding:"6px 14px",borderRadius:8,border:"none",background:`linear-gradient(135deg,${C.success},#00a86b)`,color:"#fff",fontSize:13,fontWeight:600}}>
+              📥 JSON ({doneJobs.length}件)
+            </button>
+          )}
         </div>
       </div>
 
