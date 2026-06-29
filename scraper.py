@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 # ── 設定 ──────────────────────────────────────────────────────────────────────
 BASE_URL   = "https://job.mynavi.jp/27/pc/search/corp{id}/{page}.html"
 OUTPUT     = pathlib.Path(__file__).parent / "public" / "jobs_raw.json"
-INTERVAL   = (2.0, 4.0)   # リクエスト間隔（秒）のランダム範囲
+INTERVAL   = (0.0, 0.5)   # リクエスト間隔（秒）のランダム範囲
 TIMEOUT    = 15
 HEADERS    = {
     "User-Agent": (
